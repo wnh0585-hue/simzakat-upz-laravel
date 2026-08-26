@@ -96,3 +96,25 @@ export const FUND_LABELS: Record<string, string> = {
   amil: 'Dana Amil (3301)',
   non_halal: 'Dana Non-Halal (3401)',
 };
+
+export const terbilang = (angka: number | null | undefined): string => {
+  if (!angka || isNaN(Number(angka))) return 'Nol Rupiah';
+  const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+  const n = Math.abs(Math.floor(Number(angka)));
+
+  const konversi = (x: number): string => {
+    if (x < 12) return bilangan[x];
+    if (x < 20) return konversi(x - 10) + ' Belas';
+    if (x < 100) return konversi(Math.floor(x / 10)) + ' Puluh ' + konversi(x % 10);
+    if (x < 200) return 'Seratus ' + konversi(x - 100);
+    if (x < 1000) return konversi(Math.floor(x / 100)) + ' Ratus ' + konversi(x % 100);
+    if (x < 2000) return 'Seribu ' + konversi(x - 1000);
+    if (x < 1000000) return konversi(Math.floor(x / 1000)) + ' Ribu ' + konversi(x % 1000);
+    if (x < 1000000000) return konversi(Math.floor(x / 1000000)) + ' Juta ' + konversi(x % 1000000);
+    if (x < 1000000000000) return konversi(Math.floor(x / 1000000000)) + ' Milyar ' + konversi(x % 1000000000);
+    return konversi(Math.floor(x / 1000000000000)) + ' Triliun ' + konversi(x % 1000000000000);
+  };
+
+  const hasil = konversi(n).replace(/\s+/g, ' ').trim();
+  return (hasil ? hasil : 'Nol') + ' Rupiah';
+};

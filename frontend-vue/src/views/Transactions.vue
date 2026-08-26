@@ -1,9 +1,10 @@
 <template>
   <div>
+    <!-- Section Header -->
     <div class="section-header">
       <div>
         <h3>{{ titleMap[transactionType] }}</h3>
-        <p>Kelola dan pantau seluruh transaksi {{ transactionType.replace('_', ' ') }} UPZ</p>
+        <p>Pencatatan mutasi keuangan ZIS dan operasional terintegrasi PSAK 109</p>
       </div>
       <button class="btn btn-primary" @click="isModalOpen = true">
         <Plus :size="15" /> + Tambah Transaksi
@@ -12,28 +13,21 @@
 
     <!-- Filter Bar -->
     <div class="card card-sm" style="margin-bottom: 20px;">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;">
         <div>
           <label class="form-label" style="font-size: 11px;">Pencarian</label>
-          <div class="search-input-wrap">
-            <Search :size="15" />
+          <div style="position: relative;">
             <input
               type="text"
-              class="form-input search-input"
-              placeholder="No Ref / Nama / Ket..."
+              class="form-input"
+              placeholder="Cari pihak / no. ref..."
               v-model="search"
-              @keydown.enter="fetchTransactions"
+              @input="fetchTransactions"
             />
+            <Search :size="14" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8;" />
           </div>
         </div>
-        <div>
-          <label class="form-label" style="font-size: 11px;">Dari Tanggal</label>
-          <input type="date" class="form-input" v-model="dateFrom" @change="fetchTransactions" />
-        </div>
-        <div>
-          <label class="form-label" style="font-size: 11px;">Sampai Tanggal</label>
-          <input type="date" class="form-input" v-model="dateTo" @change="fetchTransactions" />
-        </div>
+
         <div>
           <label class="form-label" style="font-size: 11px;">Kelompok Dana</label>
           <select class="form-select" v-model="fundType" @change="fetchTransactions">
@@ -45,6 +39,7 @@
             <option value="non_halal">Dana Non-Halal (3401)</option>
           </select>
         </div>
+
         <div>
           <label class="form-label" style="font-size: 11px;">Status Approval</label>
           <select class="form-select" v-model="statusFilter" @change="fetchTransactions">
@@ -57,19 +52,29 @@
             <option value="Ditolak">Ditolak</option>
           </select>
         </div>
+
+        <div>
+          <label class="form-label" style="font-size: 11px;">Dari Tanggal</label>
+          <input type="date" class="form-input" v-model="dateFrom" @change="fetchTransactions" />
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size: 11px;">Sampai Tanggal</label>
+          <input type="date" class="form-input" v-model="dateTo" @change="fetchTransactions" />
+        </div>
       </div>
     </div>
 
-    <!-- Table -->
+    <!-- Data Table -->
     <div class="card">
       <div class="table-container">
         <table>
           <thead>
             <tr>
-              <th>TANGGAL & REF</th>
+              <th>TANGGAL & NO. REF</th>
               <th>PIHAK TERKAIT</th>
               <th>KELOMPOK DANA</th>
-              <th>KETERANGAN</th>
+              <th>BUKTI / KETERANGAN</th>
               <th>STATUS</th>
               <th class="text-right">NOMINAL</th>
               <th class="text-center">AKSI / APPROVAL</th>
@@ -105,8 +110,21 @@
               </td>
               <td style="max-width: 220px;">
                 <div style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ item.description }}</div>
-                <div style="font-size: 10px; color: #64748b;">
-                  {{ item.payment_method === 'bank' ? `Bank (${item.bank_name || 'BSI'})` : 'Kas Tunai' }}
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                  <span style="font-size: 10px; color: #64748b;">
+                    {{ item.payment_method === 'bank' ? `Bank (${item.bank_name || 'BSI'})` : 'Kas Tunai' }}
+                  </span>
+                  <a
+                    v-if="item.proof_file_path"
+                    :href="`http://127.0.0.1:8000/storage/${item.proof_file_path}`"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="badge badge-green"
+                    style="font-size: 9px; text-decoration: none; display: inline-flex; align-items: center; gap: 2px;"
+                    title="Lihat Bukti Dokumen"
+                  >
+                    <FileCheck :size="11" /> Bukti Ada
+                  </a>
                 </div>
               </td>
               <td>
@@ -119,6 +137,11 @@
               </td>
               <td class="text-center">
                 <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                  <!-- Print Kwitansi -->
+                  <button class="btn btn-blue btn-xs" title="Cetak Kwitansi Resmi" @click="openReceipt(item)">
+                    <Printer :size="13" />
+                  </button>
+
                   <button class="btn btn-secondary btn-xs" title="Lihat Detail" @click="detailItem = item">
                     <Eye :size="13" />
                   </button>
@@ -171,9 +194,9 @@
       </div>
     </div>
 
-    <!-- Modal Form -->
+    <!-- Modal Form Tambah Transaksi -->
     <div v-if="isModalOpen" class="modal-overlay" @click="isModalOpen = false">
-      <div class="modal" @click.stop>
+      <div class="modal" @click.stop style="max-width: 600px;">
         <div class="modal-header">
           <h3>+ Tambah {{ titleMap[transactionType] }}</h3>
           <button class="btn-close" @click="isModalOpen = false">
@@ -264,17 +287,37 @@
               <label class="form-label">Keterangan / Uraian Transaksi<span class="required">*</span></label>
               <textarea
                 class="form-textarea"
-                rows="3"
+                rows="2"
                 placeholder="Tuliskan rincian transaksi..."
                 v-model="form.description"
                 required
               ></textarea>
             </div>
+
+            <!-- Upload Bukti Dokumen (Gambar / Dokumen) -->
+            <div class="form-group" style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: var(--radius-sm); padding: 12px;">
+              <label class="form-label" style="margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <Paperclip :size="14" color="#059669" />
+                <span>Upload Bukti Dokumen (Foto / Kuitansi / Berita Acara / PDF)</span>
+              </label>
+              <input
+                type="file"
+                ref="fileInputRef"
+                class="form-input"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                style="background: #ffffff;"
+              />
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
+                Format yang didukung: JPG, PNG, PDF, Excel (Maks. 10 MB).
+              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="isModalOpen = false">Batal</button>
-            <button type="submit" class="btn btn-primary">
-              <Save :size="15" /> Simpan Transaksi
+            <button type="submit" class="btn btn-primary" :disabled="submitting">
+              <span v-if="submitting" class="loading-spinner" style="width: 14px; height: 14px; margin-right: 6px;"></span>
+              <Save v-else :size="15" />
+              {{ submitting ? 'Menyimpan & Menyiapkan Kwitansi...' : 'Simpan & Cetak Kwitansi' }}
             </button>
           </div>
         </form>
@@ -283,7 +326,7 @@
 
     <!-- Detail Modal -->
     <div v-if="detailItem" class="modal-overlay" @click="detailItem = null">
-      <div class="modal" @click.stop>
+      <div class="modal" @click.stop style="max-width: 550px;">
         <div class="modal-header">
           <h3>Rincian Kuitansi {{ detailItem.reference_number }}</h3>
           <button class="btn-close" @click="detailItem = null">
@@ -291,32 +334,72 @@
           </button>
         </div>
         <div class="modal-body">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 13px;">
-            <div><span style="color: #64748b;">No. Ref:</span><br /><strong>{{ detailItem.reference_number }}</strong></div>
+          <div class="grid-2" style="font-size: 13px; gap: 12px; margin-bottom: 12px;">
             <div><span style="color: #64748b;">Tanggal:</span><br /><strong>{{ formatDate(detailItem.date) }}</strong></div>
-            <div><span style="color: #64748b;">Jenis:</span><br /><strong>{{ detailItem.type?.toUpperCase() }}</strong></div>
-            <div><span style="color: #64748b;">Kelompok Dana:</span><br /><strong>{{ detailItem.fund_type }}</strong></div>
-            <div><span style="color: #64748b;">Pihak:</span><br /><strong>{{ detailItem.party_name }}</strong></div>
+            <div><span style="color: #64748b;">Status:</span><br /><span :class="['status-badge', `status-${detailItem.status?.toLowerCase()}`]">{{ detailItem.status }}</span></div>
+            <div><span style="color: #64748b;">Pihak Terkait:</span><br /><strong>{{ detailItem.party_name }}</strong></div>
+            <div><span style="color: #64748b;">Kelompok Dana:</span><br /><strong>{{ detailItem.fund_type?.toUpperCase() }}</strong></div>
+            <div><span style="color: #64748b;">Metode Bayar:</span><br /><strong>{{ detailItem.payment_method === 'bank' ? detailItem.bank_name : 'Kas Tunai' }}</strong></div>
             <div><span style="color: #64748b;">Nominal:</span><br /><strong style="font-size: 16px; color: #059669;">{{ formatRp(detailItem.amount) }}</strong></div>
           </div>
           <div class="divider"></div>
-          <div style="font-size: 13px;">
+          <div style="font-size: 13px; margin-bottom: 12px;">
             <span style="color: #64748b;">Uraian:</span>
             <p style="margin-top: 4px; line-height: 1.6;">{{ detailItem.description }}</p>
           </div>
+
+          <!-- Dokumen Lampiran -->
+          <div v-if="detailItem.proof_file_path" style="background: #f1f5f9; border-radius: var(--radius-sm); padding: 10px; font-size: 12px;">
+            <span style="color: #64748b; font-weight: 600;">Lampiran Dokumen Bukti:</span>
+            <div style="margin-top: 6px; display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-weight: 700; color: #334155;">{{ detailItem.proof_file_name || 'Dokumen Bukti Penyaluran' }}</span>
+              <a
+                :href="`http://127.0.0.1:8000/storage/${detailItem.proof_file_path}`"
+                target="_blank"
+                rel="noreferrer"
+                class="btn btn-secondary btn-xs"
+              >
+                <ExternalLink :size="12" style="margin-right: 3px;" /> Buka Lampiran
+              </a>
+            </div>
+          </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer" style="justify-content: space-between;">
+          <button class="btn btn-blue btn-sm" @click="openReceipt(detailItem)">
+            <Printer :size="14" /> Cetak Kwitansi (1/2 A4)
+          </button>
           <button class="btn btn-secondary" @click="detailItem = null">Tutup</button>
         </div>
       </div>
     </div>
+
+    <!-- Kwitansi Cetak Modal (Ukuran A4 Dibagi 2 / A5 Landscape) -->
+    <KwitansiModal
+      :isOpen="isReceiptOpen"
+      :transaction="receiptTransaction"
+      :user="user"
+      @close="isReceiptOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import api, { cachedGet, formatRp, formatDate, ASNAF_LABELS } from '../lib/api';
-import { Plus, Search, Eye, Send, CheckCircle2, X, Save } from '@lucide/vue';
+import KwitansiModal from '../components/KwitansiModal.vue';
+import {
+  Plus,
+  Search,
+  Eye,
+  Send,
+  CheckCircle2,
+  X,
+  Save,
+  Printer,
+  Paperclip,
+  FileCheck,
+  ExternalLink,
+} from '@lucide/vue';
 
 const props = defineProps<{
   transactionType: 'penerimaan' | 'penyaluran' | 'amil_operasional';
@@ -325,8 +408,14 @@ const props = defineProps<{
 
 const data = ref<any[]>([]);
 const loading = ref(false);
+const submitting = ref(false);
 const isModalOpen = ref(false);
 const detailItem = ref<any | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+// Kwitansi Print State
+const isReceiptOpen = ref(false);
+const receiptTransaction = ref<any | null>(null);
 
 const search = ref('');
 const dateFrom = ref('');
@@ -352,6 +441,11 @@ const titleMap: Record<string, string> = {
   penerimaan: 'Penerimaan Dana ZIS',
   penyaluran: 'Penyaluran Dana ZIS (8 Asnaf)',
   amil_operasional: 'Pengeluaran Operasional Amil',
+};
+
+const openReceipt = (item: any) => {
+  receiptTransaction.value = item;
+  isReceiptOpen.value = true;
 };
 
 const handleSelectBank = () => {
@@ -398,13 +492,36 @@ const fetchTransactions = async () => {
 };
 
 const handleSubmit = async () => {
+  submitting.value = true;
   try {
-    await api.post('/transactions', {
-      ...form.value,
-      amount: Number(form.value.amount),
-      type: props.transactionType,
+    const fd = new FormData();
+    fd.append('type', props.transactionType);
+    fd.append('date', form.value.date);
+    fd.append('fund_type', form.value.fund_type);
+    fd.append('amount', form.value.amount);
+    fd.append('payment_method', form.value.payment_method);
+    if (form.value.bank_account_id) fd.append('bank_account_id', String(form.value.bank_account_id));
+    if (form.value.bank_name) fd.append('bank_name', form.value.bank_name);
+    fd.append('party_name', form.value.party_name);
+    if (props.transactionType === 'penyaluran' && form.value.asnaf) {
+      fd.append('asnaf', form.value.asnaf);
+    }
+    fd.append('description', form.value.description);
+
+    // Lampiran Dokumen
+    const file = fileInputRef.value?.files?.[0];
+    if (file) {
+      fd.append('proof_file', file);
+    }
+
+    const res = await api.post('/transactions', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
+
     isModalOpen.value = false;
+    const createdTx = res.data;
+
+    // Reset Form
     form.value = {
       date: new Date().toISOString().slice(0, 10),
       fund_type: 'zakat',
@@ -416,9 +533,20 @@ const handleSubmit = async () => {
       asnaf: 'fakir',
       description: '',
     };
+    if (fileInputRef.value) fileInputRef.value.value = '';
+
     fetchTransactions();
+
+    // Otomatis Buka Kwitansi Cetak (A5 / 1/2 A4) & Trigger Print Dialog
+    receiptTransaction.value = createdTx;
+    isReceiptOpen.value = true;
+    setTimeout(() => {
+      window.print();
+    }, 400);
   } catch (err: any) {
-    alert(err.response?.data?.message || 'Gagal menyimpan transaksi');
+    alert(err.response?.data?.message || 'Gagal menyimpan transaksi.');
+  } finally {
+    submitting.value = false;
   }
 };
 
