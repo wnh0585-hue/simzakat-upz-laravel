@@ -34,6 +34,9 @@ class BaznasTransactionController extends Controller
             'mustahik_amount' => 'nullable|numeric',
         ]);
         $data['created_by'] = $request->user()->id;
+        if ($request->user()->role === 'Admin' || $request->user()->role === 'Pimpinan') {
+            $data['status'] = 'Disetujui';
+        }
         $b = BaznasTransaction::create($data);
         AuditLog::create([
             'user_id' => $request->user()->id,

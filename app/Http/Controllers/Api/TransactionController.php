@@ -59,8 +59,17 @@ class TransactionController extends Controller
         ]);
 
         $validated['reference_number'] = Transaction::generateReferenceNumber($validated['type']);
-        $validated['status'] = 'Draft';
-        $validated['created_by'] = $request->user()->id;
+        $user = $request->user();
+        $validated['created_by'] = $user->id;
+
+        // Auto-approve if created by Admin or Pimpinan
+        if ($user->role === 'Admin' || $user->role === 'Pimpinan') {
+            $validated['status'] = 'Disetujui';
+            $validated['verified_by'] = $user->id;
+            $validated['approved_by'] = $user->id;
+        } else {
+            $validated['status'] = 'Draft';
+        }
 
         $transaction = Transaction::create($validated);
 
@@ -165,9 +174,21 @@ class TransactionController extends Controller
 
         // Role-based approval checks
         $allowedTransitions = [
-            'Operator' => ['Diajukan' => ['Draft', 'Ditolak']],
-            'Admin' => ['Terverifikasi' => ['Diajukan'], 'Ditolak' => ['Diajukan', 'Terverifikasi']],
-            'Pimpinan' => ['Disetujui' => ['Terverifikasi'], 'Ditolak' => ['Diajukan', 'Terverifikasi'], 'Tersalurkan' => ['Disetujui']],
+            'Operator' => [
+                'Diajukan' => ['Draft', 'Ditolak']
+            ],
+            'Admin' => [
+                'Disetujui' => ['Draft', 'Diajukan', 'Terverifikasi', 'Ditolak', 'Tersalurkan'],
+                'Terverifikasi' => ['Draft', 'Diajukan'],
+                'Ditolak' => ['Draft', 'Diajukan', 'Terverifikasi', 'Disetujui'],
+                'Tersalurkan' => ['Draft', 'Diajukan', 'Terverifikasi', 'Disetujui'],
+                'Draft' => ['Diajukan', 'Ditolak', 'Disetujui']
+            ],
+            'Pimpinan' => [
+                'Disetujui' => ['Draft', 'Diajukan', 'Terverifikasi'],
+                'Ditolak' => ['Diajukan', 'Terverifikasi', 'Disetujui'],
+                'Tersalurkan' => ['Disetujui']
+            ],
         ];
 
         $roleAllowed = $allowedTransitions[$user->role] ?? [];
@@ -180,7 +201,10 @@ class TransactionController extends Controller
         $updates = ['status' => $newStatus, 'notes' => $request->notes];
 
         if ($newStatus === 'Terverifikasi') $updates['verified_by'] = $user->id;
-        if ($newStatus === 'Disetujui') $updates['approved_by'] = $user->id;
+        if ($newStatus === 'Disetujui' || $newStatus === 'Tersalurkan') {
+            $updates['verified_by'] = $transaction->verified_by ?? $user->id;
+            $updates['approved_by'] = $user->id;
+        }
 
         $transaction->update($updates);
 

@@ -124,7 +124,16 @@
                   </button>
 
                   <button
-                    v-if="item.status === 'Draft' && user?.role === 'Operator'"
+                    v-if="['Draft', 'Diajukan', 'Terverifikasi'].includes(item.status) && user?.role === 'Admin'"
+                    class="btn btn-primary btn-xs"
+                    @click="handleUpdateStatus(item.id, 'Disetujui')"
+                    title="Setujui Langsung oleh Admin"
+                  >
+                    <CheckCircle2 :size="12" style="margin-right: 2px;" /> Setujui
+                  </button>
+
+                  <button
+                    v-else-if="item.status === 'Draft' && user?.role === 'Operator'"
                     class="btn btn-orange btn-xs"
                     @click="handleUpdateStatus(item.id, 'Diajukan')"
                   >
@@ -132,15 +141,7 @@
                   </button>
 
                   <button
-                    v-if="item.status === 'Diajukan' && user?.role === 'Admin'"
-                    class="btn btn-blue btn-xs"
-                    @click="handleUpdateStatus(item.id, 'Terverifikasi')"
-                  >
-                    <Check :size="12" style="margin-right: 2px;" /> Verifikasi
-                  </button>
-
-                  <button
-                    v-if="item.status === 'Terverifikasi' && (user?.role === 'Pimpinan' || user?.role === 'Admin')"
+                    v-else-if="item.status === 'Terverifikasi' && user?.role === 'Pimpinan'"
                     class="btn btn-primary btn-xs"
                     @click="handleUpdateStatus(item.id, 'Disetujui')"
                   >
@@ -156,7 +157,7 @@
                   </button>
 
                   <button
-                    v-if="['Diajukan', 'Terverifikasi'].includes(item.status) && (user?.role === 'Admin' || user?.role === 'Pimpinan')"
+                    v-if="['Draft', 'Diajukan', 'Terverifikasi'].includes(item.status) && (user?.role === 'Admin' || user?.role === 'Pimpinan')"
                     class="btn btn-red btn-xs"
                     @click="handleUpdateStatus(item.id, 'Ditolak')"
                   >
@@ -315,7 +316,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import api, { cachedGet, formatRp, formatDate, ASNAF_LABELS } from '../lib/api';
-import { Plus, Search, Eye, Send, Check, CheckCircle2, X, Save } from '@lucide/vue';
+import { Plus, Search, Eye, Send, CheckCircle2, X, Save } from '@lucide/vue';
 
 const props = defineProps<{
   transactionType: 'penerimaan' | 'penyaluran' | 'amil_operasional';
