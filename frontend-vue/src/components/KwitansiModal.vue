@@ -157,8 +157,211 @@ const close = () => {
 };
 
 const handlePrint = () => {
-  window.print();
+  const receiptEl = document.getElementById('printable-receipt');
+  if (!receiptEl) {
+    window.print();
+    return;
+  }
+
+  const printWin = window.open('', '_blank', 'width=850,height=600');
+  if (!printWin) {
+    window.print();
+    return;
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <title>Kwitansi ${props.transaction?.reference_number || 'ZIS'} - UPZ Kemenag Kebumen</title>
+        <style>
+          @page {
+            size: A5 landscape;
+            margin: 6mm 8mm;
+          }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+          }
+          body {
+            background: #ffffff;
+            color: #0f172a;
+            padding: 10px;
+          }
+          .receipt-kop {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 6px;
+          }
+          .receipt-kop-logo {
+            flex-shrink: 0;
+          }
+          .receipt-kop-text {
+            flex: 1;
+            text-align: center;
+          }
+          .kop-instansi {
+            font-size: 13px;
+            font-weight: 800;
+            color: #059669;
+          }
+          .kop-kemenag {
+            font-size: 14px;
+            font-weight: 900;
+            color: #0f172a;
+          }
+          .kop-baznas {
+            font-size: 9.5px;
+            font-weight: 700;
+            color: #475569;
+          }
+          .kop-alamat {
+            font-size: 9px;
+            color: #64748b;
+            margin-top: 1px;
+          }
+          .receipt-kop-line {
+            border-top: 2.5px double #0f172a;
+            margin-bottom: 10px;
+          }
+          .receipt-title-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 4px 10px;
+            margin-bottom: 10px;
+          }
+          .receipt-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .receipt-ref {
+            font-size: 10.5px;
+            color: #0f172a;
+            font-family: monospace;
+          }
+          .receipt-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+          }
+          .receipt-table td {
+            padding: 4px 3px;
+            vertical-align: top;
+            font-size: 11px;
+          }
+          .lbl-col {
+            width: 140px;
+            font-weight: 600;
+            color: #334155;
+          }
+          .dot-col {
+            width: 10px;
+            text-align: center;
+            font-weight: bold;
+          }
+          .val-col {
+            color: #0f172a;
+          }
+          .nominal-badge {
+            font-size: 13px;
+            font-weight: 900;
+            color: #047857;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            padding: 1px 6px;
+            border-radius: 4px;
+            display: inline-block;
+          }
+          .terbilang-text {
+            font-weight: 700;
+            color: #1e3a8a;
+            background: #eff6ff;
+            padding: 3px 6px !important;
+            border-radius: 4px;
+            border: 1px dashed #bfdbfe;
+          }
+          .receipt-asnaf-badge {
+            background: #f3e8ff;
+            color: #7e22ce;
+            font-size: 9.5px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 4px;
+          }
+          .receipt-signatures {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 14px;
+            text-align: center;
+          }
+          .sig-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          .sig-date {
+            font-size: 9.5px;
+            color: #475569;
+            min-height: 13px;
+          }
+          .sig-role {
+            font-size: 10px;
+            color: #334155;
+            min-height: 24px;
+          }
+          .sig-line {
+            width: 120px;
+            border-bottom: 1px solid #0f172a;
+            margin-top: 42px;
+            margin-bottom: 3px;
+          }
+          .sig-name {
+            font-size: 10px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .receipt-footer-note {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+            color: #94a3b8;
+            border-top: 1px dotted #cbd5e1;
+            padding-top: 4px;
+            margin-top: 10px;
+          }
+        </style>
+      </head>
+      <body>
+        ${receiptEl.innerHTML}
+      </body>
+    </html>
+  `;
+
+  printWin.document.open();
+  printWin.document.write(htmlContent);
+  printWin.document.close();
+  printWin.focus();
+
+  setTimeout(() => {
+    printWin.print();
+    printWin.close();
+  }, 350);
 };
+
+defineExpose({
+  handlePrint,
+});
 </script>
 
 <style scoped>

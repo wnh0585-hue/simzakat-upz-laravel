@@ -481,3 +481,60 @@ tbody tr:last-child td { border-bottom: none; }
   .fund-cards-grid, .stat-cards, .form-grid-2, .form-grid-3, .page-grid-2, .page-grid-3 { grid-template-columns: 1fr; }
   .page-content { padding: 16px; }
 }
+
+/* ==========================================================================
+   GLOBAL PRINT RULES (Hanya mencetak Kwitansi / Dokumen Print)
+   ========================================================================== */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Sembunyikan seluruh elemen dashboard, sidebar, tabel background */
+  .sidebar,
+  .topbar,
+  .section-header,
+  .table-container,
+  .card:not(.receipt-paper),
+  .modal-overlay:not(.receipt-modal-overlay),
+  .no-print {
+    display: none !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .page-content {
+    padding: 0 !important;
+  }
+
+  .receipt-modal-overlay {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    z-index: 999999 !important;
+  }
+
+  .receipt-modal {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
