@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
+use App\Models\BankAccount;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ReportExport;
@@ -33,11 +34,65 @@ class ReportController extends Controller
         $date = $request->get('date', date('Y-m-d'));
         $balances = $this->getFundBalances($date);
 
+        // Hitung Kas Tunai
+        $kasTunai = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+            ->where('payment_method', 'tunai')
+            ->where('date', '<=', $date)
+            ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as saldo")
+            ->value('saldo') ?? 0;
+
+        // Hitung Kas per Rekening Bank
+        $bankAccounts = BankAccount::all();
+        $bankBalances = [];
+        foreach ($bankAccounts as $bank) {
+            $saldoBank = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+                ->where('payment_method', 'bank')
+                ->where('bank_account_id', $bank->id)
+                ->where('date', '<=', $date)
+                ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as saldo")
+                ->value('saldo') ?? 0;
+
+            $bankBalances[] = [
+                'id' => $bank->id,
+                'bank_name' => $bank->bank_name,
+                'account_number' => $bank->account_number,
+                'account_holder' => $bank->account_holder,
+                'fund_type' => $bank->fund_type,
+                'balance' => (float)$saldoBank,
+            ];
+        }
+
+        // Cek jika ada transaksi bank tanpa bank_account_id
+        $unassignedBank = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+            ->where('payment_method', 'bank')
+            ->whereNull('bank_account_id')
+            ->where('date', '<=', $date)
+            ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as saldo")
+            ->value('saldo') ?? 0;
+
+        if ($unassignedBank != 0 || empty($bankBalances)) {
+            $bankBalances[] = [
+                'id' => 0,
+                'bank_name' => 'Rekening Bank Lainnya',
+                'account_number' => '-',
+                'account_holder' => 'UPZ Kemenag Kebumen',
+                'fund_type' => null,
+                'balance' => (float)$unassignedBank,
+            ];
+        }
+
+        $totalBank = array_sum(array_column($bankBalances, 'balance'));
+        $totalAset = (float)$kasTunai + (float)$totalBank;
+
         $data = [
             'report_type' => 'Laporan Posisi Keuangan (Neraca)',
             'date' => $date,
             'balances' => $balances,
-            'total_aset' => array_sum(array_column($balances, 'balance')),
+            'kas_tunai' => (float)$kasTunai,
+            'bank_accounts' => $bankBalances,
+            'total_bank' => (float)$totalBank,
+            'total_aset' => $totalAset,
+            'total_saldo_dana' => array_sum(array_column($balances, 'balance')),
         ];
 
         if ($request->format === 'pdf') {
@@ -139,29 +194,45 @@ class ReportController extends Controller
         $dateFrom = $request->get('date_from', date('Y-01-01'));
         $dateTo = $request->get('date_to', date('Y-12-31'));
         $paymentMethod = $request->get('payment_method', 'tunai');
+        $bankAccountId = $request->get('bank_account_id');
         $fundType = $request->get('fund_type');
 
-        $query = Transaction::with(['muzakki', 'mustahik', 'creator'])
+        $query = Transaction::with(['muzakki', 'mustahik', 'creator', 'bankAccount'])
             ->whereIn('status', ['Disetujui', 'Tersalurkan'])
             ->whereBetween('date', [$dateFrom, $dateTo])
             ->where('payment_method', $paymentMethod)
             ->orderBy('date')->orderBy('id');
 
+        if ($paymentMethod === 'bank' && $bankAccountId) {
+            $query->where('bank_account_id', $bankAccountId);
+        }
+
         if ($fundType) $query->where('fund_type', $fundType);
 
         $transactions = $query->get();
 
-        $saldoAwal = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+        $saldoAwalQuery = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
             ->where('payment_method', $paymentMethod)
-            ->where('date', '<', $dateFrom)
-            ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as saldo")
+            ->where('date', '<', $dateFrom);
+
+        if ($paymentMethod === 'bank' && $bankAccountId) {
+            $saldoAwalQuery->where('bank_account_id', $bankAccountId);
+        }
+        if ($fundType) {
+            $saldoAwalQuery->where('fund_type', $fundType);
+        }
+
+        $saldoAwal = $saldoAwalQuery->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as saldo")
             ->value('saldo') ?? 0;
 
         $data = [
             'report_type' => "Buku Kas " . ucfirst($paymentMethod),
             'date_from' => $dateFrom, 'date_to' => $dateTo,
-            'payment_method' => $paymentMethod, 'fund_type' => $fundType,
-            'saldo_awal' => $saldoAwal, 'transactions' => $transactions,
+            'payment_method' => $paymentMethod,
+            'bank_account_id' => $bankAccountId,
+            'fund_type' => $fundType,
+            'saldo_awal' => (float)$saldoAwal,
+            'transactions' => $transactions,
         ];
 
         if ($request->format === 'pdf') {
@@ -264,7 +335,40 @@ class ReportController extends Controller
         $tunai = $this->getMutasiByMethod('tunai', $dateFrom, $dateTo);
         $bank = $this->getMutasiByMethod('bank', $dateFrom, $dateTo);
 
-        $data = ['report_type' => 'Mutasi Kas & Bank', 'date_from' => $dateFrom, 'date_to' => $dateTo, 'tunai' => $tunai, 'bank' => $bank];
+        // Mutasi per masing-masing rekening bank
+        $bankAccounts = BankAccount::all();
+        $bankAccountsMutasi = [];
+        foreach ($bankAccounts as $b) {
+            $q = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+                ->where('payment_method', 'bank')
+                ->where('bank_account_id', $b->id);
+
+            $sAwal = (clone $q)->where('date', '<', $dateFrom)
+                ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as s")->value('s') ?? 0;
+            $masuk = (clone $q)->where('type', 'penerimaan')->whereBetween('date', [$dateFrom, $dateTo])->sum('amount');
+            $keluar = (clone $q)->where('type', '!=', 'penerimaan')->whereBetween('date', [$dateFrom, $dateTo])->sum('amount');
+
+            $bankAccountsMutasi[] = [
+                'id' => $b->id,
+                'bank_name' => $b->bank_name,
+                'account_number' => $b->account_number,
+                'account_holder' => $b->account_holder,
+                'fund_type' => $b->fund_type,
+                'saldo_awal' => (float)$sAwal,
+                'masuk' => (float)$masuk,
+                'keluar' => (float)$keluar,
+                'saldo_akhir' => (float)($sAwal + $masuk - $keluar),
+            ];
+        }
+
+        $data = [
+            'report_type' => 'Mutasi Kas & Bank',
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'tunai' => $tunai,
+            'bank' => $bank,
+            'bank_accounts' => $bankAccountsMutasi,
+        ];
 
         if ($request->format === 'pdf') {
             $pdf = Pdf::loadView('reports.mutasi-kas-bank', $data)->setPaper('a4', 'landscape');

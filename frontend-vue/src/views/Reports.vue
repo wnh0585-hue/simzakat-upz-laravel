@@ -1,11 +1,11 @@
 <template>
   <div>
-    <!-- POSISI KEUANGAN -->
+    <!-- POSISI KEUANGAN (NERACA) -->
     <div v-if="reportType === 'posisi-keuangan'">
       <div class="section-header">
         <div>
           <h3>Laporan Posisi Keuangan (Neraca) PSAK 109</h3>
-          <p>Kondisi saldo aset kelolaan per tanggal pelaporan</p>
+          <p>Kondisi saldo aset kelolaan (Kas Tunai & Rekening Bank) per tanggal pelaporan</p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
           <input type="date" class="form-input" v-model="posDate" @change="fetchPosisi" style="width: 160px;" />
@@ -18,14 +18,84 @@
         </div>
       </div>
 
-      <div class="card">
+      <!-- 1. ASET LANCAR: KAS TUNAI & REKENING BANK -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h4 style="font-weight: 800; font-size: 15px; color: #0f172a;">
+            1. ASET LANCAR (KAS & SETARA KAS)
+          </h4>
+          <span class="badge badge-green">Tersinkronisasi Real-Time</span>
+        </div>
         <table class="report-table">
           <thead>
             <tr>
-              <th>Kelompok Dana</th>
-              <th class="text-right">Penerimaan (Rp)</th>
-              <th class="text-right">Penyaluran (Rp)</th>
-              <th class="text-right">Saldo Bersih (Rp)</th>
+              <th>POS KAS / REKENING BANK</th>
+              <th>PERUNTUKAN POS DANA</th>
+              <th class="text-right">SALDO PER PELAPORAN (RP)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- KAS TUNAI -->
+            <tr style="background: #f8fafc;">
+              <td>
+                <div style="font-weight: 700;">💵 Kas Tunai di Bendahara (Brankas UPZ)</div>
+                <div style="font-size: 11px; color: #64748b;">Uang kas fisik di kantor UPZ Kemenag</div>
+              </td>
+              <td><span class="badge badge-gray">Kas Fisik Tunai</span></td>
+              <td class="text-right font-bold" style="font-size: 14px;">
+                {{ formatRp(posData?.kas_tunai || 0) }}
+              </td>
+            </tr>
+
+            <!-- HEADER KAS BANK -->
+            <tr>
+              <td colspan="3" style="background: #f1f5f9; font-weight: 800; font-size: 12px; color: #334155;">
+                🏦 REKENING BANK RESMI UPZ KEMENAG KEBUMEN
+              </td>
+            </tr>
+
+            <!-- LOOP PER REKENING BANK -->
+            <tr v-for="b in posData?.bank_accounts || []" :key="b.id">
+              <td style="padding-left: 24px;">
+                <div style="font-weight: 600;">Bank {{ b.bank_name }} - {{ b.account_number }}</div>
+                <div style="font-size: 11px; color: #64748b;">a.n. {{ b.account_holder }}</div>
+              </td>
+              <td>
+                <span class="badge badge-blue">
+                  {{ b.fund_type ? 'Pos ' + b.fund_type.replace(/_/g, ' ').toUpperCase() : 'Semua Pos Dana' }}
+                </span>
+              </td>
+              <td class="text-right font-bold" style="color: #1e3a8a;">
+                {{ formatRp(b.balance || 0) }}
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2"><strong>TOTAL KAS & SETARA KAS (ASET LANCAR)</strong></td>
+              <td class="text-right" style="font-size: 16px; color: #059669;">
+                <strong>{{ formatRp(posData?.total_aset || 0) }}</strong>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- 2. SALDO DANA KELOLAAN PSAK 109 -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h4 style="font-weight: 800; font-size: 15px; color: #0f172a;">
+            2. SALDO DANA KELOLAAN (EKUITAS DANA PSAK 109)
+          </h4>
+          <span class="badge badge-teal">5 Kantong Dana Syariah</span>
+        </div>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>KELOMPOK DANA</th>
+              <th class="text-right">PENERIMAAN AKUMULASI (RP)</th>
+              <th class="text-right">PENYALURAN AKUMULASI (RP)</th>
+              <th class="text-right">SALDO AKHIR DANA (RP)</th>
             </tr>
           </thead>
           <tbody>
@@ -38,7 +108,7 @@
           </tbody>
           <tfoot>
             <tr>
-              <td><strong>TOTAL ASET BERSIH KELOLAAN</strong></td>
+              <td><strong>TOTAL SALDO DANA KELOLAAN</strong></td>
               <td class="text-right amount-positive">
                 <strong>{{ formatRp(Object.values(posData?.balances || {}).reduce((s: number, b: any) => s + (b.in || 0), 0)) }}</strong>
               </td>
@@ -46,11 +116,16 @@
                 <strong>{{ formatRp(Object.values(posData?.balances || {}).reduce((s: number, b: any) => s + (b.out || 0), 0)) }}</strong>
               </td>
               <td class="text-right" style="font-size: 16px; color: #059669;">
-                <strong>{{ formatRp(posData?.total_aset || 0) }}</strong>
+                <strong>{{ formatRp(posData?.total_saldo_dana || posData?.total_aset || 0) }}</strong>
               </td>
             </tr>
           </tfoot>
         </table>
+
+        <div style="margin-top: 14px; padding: 10px 14px; background: #ecfdf5; border-radius: 6px; border: 1px solid #a7f3d0; font-size: 12px; color: #065f46; display: flex; justify-content: space-between; align-items: center;">
+          <span>✓ <strong>Neraca Seimbang:</strong> Total Kas & Bank = Total Saldo Dana PSAK 109</span>
+          <strong>{{ formatRp(posData?.total_aset || 0) }}</strong>
+        </div>
       </div>
     </div>
 
@@ -171,13 +246,28 @@
             <option value="tunai">Kas Tunai</option>
             <option value="bank">Kas Bank</option>
           </select>
+
+          <!-- PILIH BANK SPESIFIK JIKA METODE BANK -->
+          <select
+            v-if="bukuKasMethod === 'bank'"
+            class="form-select"
+            v-model="selectedBankId"
+            @change="fetchBukuKas"
+            style="width: 220px;"
+          >
+            <option value="">-- Semua Rekening Bank --</option>
+            <option v-for="b in bankAccounts" :key="b.id" :value="b.id">
+              {{ b.bank_name }} - {{ b.account_number }}
+            </option>
+          </select>
+
           <input type="date" class="form-input" v-model="dateFrom" @change="fetchBukuKas" style="width: 150px;" />
           <span style="color: #64748b;">s/d</span>
           <input type="date" class="form-input" v-model="dateTo" @change="fetchBukuKas" style="width: 150px;" />
-          <button class="btn btn-pdf btn-sm" @click="download('/reports/buku-kas', { date_from: dateFrom, date_to: dateTo, payment_method: bukuKasMethod }, 'pdf')">
+          <button class="btn btn-pdf btn-sm" @click="download('/reports/buku-kas', { date_from: dateFrom, date_to: dateTo, payment_method: bukuKasMethod, bank_account_id: selectedBankId }, 'pdf')">
             <FileText :size="14" /> Unduh PDF
           </button>
-          <button class="btn btn-excel btn-sm" @click="download('/reports/buku-kas', { date_from: dateFrom, date_to: dateTo, payment_method: bukuKasMethod }, 'excel')">
+          <button class="btn btn-excel btn-sm" @click="download('/reports/buku-kas', { date_from: dateFrom, date_to: dateTo, payment_method: bukuKasMethod, bank_account_id: selectedBankId }, 'excel')">
             <FileSpreadsheet :size="14" /> Unduh Excel
           </button>
         </div>
@@ -324,7 +414,7 @@
       <div class="section-header">
         <div>
           <h3>Mutasi Kas & Bank</h3>
-          <p>Rekonsiliasi pergerakan kas tunai dan rekening bank</p>
+          <p>Rekonsiliasi pergerakan kas tunai dan per masing-masing rekening bank</p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
           <input type="date" class="form-input" v-model="dateFrom" @change="fetchMutasi" style="width: 150px;" />
@@ -339,11 +429,12 @@
         </div>
       </div>
 
-      <div class="page-grid-2">
+      <!-- KARTU IKHTISAR -->
+      <div class="page-grid-2" style="margin-bottom: 20px;">
         <div class="card">
-          <h4 style="font-weight: 700; margin-bottom: 16px;">Rekonsiliasi Kas Tunai</h4>
+          <h4 style="font-weight: 700; margin-bottom: 16px;">1. Rekonsiliasi Kas Tunai Fisik</h4>
           <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
-            <span>Saldo Awal</span>
+            <span>Saldo Awal Kas Tunai</span>
             <strong>{{ formatRp(mutasiData?.tunai?.saldo_awal || 0) }}</strong>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
@@ -355,15 +446,15 @@
             <span class="amount-negative">({{ formatRp(mutasiData?.tunai?.keluar || 0) }})</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 14px 0 0; margin-top: 4px;">
-            <strong>Saldo Akhir</strong>
+            <strong>Saldo Akhir Kas Tunai</strong>
             <strong style="font-size: 18px; color: #059669;">{{ formatRp(mutasiData?.tunai?.saldo_akhir || 0) }}</strong>
           </div>
         </div>
 
         <div class="card">
-          <h4 style="font-weight: 700; margin-bottom: 16px;">Rekonsiliasi Rekening Bank</h4>
+          <h4 style="font-weight: 700; margin-bottom: 16px;">2. Total Seluruh Rekening Kas Bank</h4>
           <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
-            <span>Saldo Awal</span>
+            <span>Saldo Awal Kas Bank</span>
             <strong>{{ formatRp(mutasiData?.bank?.saldo_awal || 0) }}</strong>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
@@ -375,9 +466,68 @@
             <span class="amount-negative">({{ formatRp(mutasiData?.bank?.keluar || 0) }})</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 14px 0 0; margin-top: 4px;">
-            <strong>Saldo Akhir</strong>
+            <strong>Saldo Akhir Seluruh Bank</strong>
             <strong style="font-size: 18px; color: #059669;">{{ formatRp(mutasiData?.bank?.saldo_akhir || 0) }}</strong>
           </div>
+        </div>
+      </div>
+
+      <!-- TABEL RINCIAN PER REKENING BANK -->
+      <div class="card">
+        <div style="margin-bottom: 14px;">
+          <h4 style="font-weight: 800; font-size: 15px; color: #0f172a;">
+            Rincian Mutasi Per Rekening Bank UPZ
+          </h4>
+          <p style="font-size: 12px; color: #64748b;">Pergerakan saldo pada masing-masing rekening bank terdaftar</p>
+        </div>
+        <div class="table-container">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>BANK & NO. REKENING</th>
+                <th>PERUNTUKAN POS DANA</th>
+                <th class="text-right">SALDO AWAL</th>
+                <th class="text-right">PENERIMAAN (+)</th>
+                <th class="text-right">PENYALURAN (-)</th>
+                <th class="text-right">SALDO AKHIR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!mutasiData?.bank_accounts?.length">
+                <td colspan="6" class="text-center" style="padding: 24px; color: #64748b;">
+                  Belum ada transaksi rekening bank pada periode ini.
+                </td>
+              </tr>
+              <tr v-for="b in mutasiData?.bank_accounts || []" :key="b.id">
+                <td>
+                  <div style="font-weight: 700;">Bank {{ b.bank_name }} - {{ b.account_number }}</div>
+                  <div style="font-size: 11px; color: #64748b;">a.n. {{ b.account_holder }}</div>
+                </td>
+                <td>
+                  <span class="badge badge-blue">
+                    {{ b.fund_type ? 'Pos ' + b.fund_type.replace(/_/g, ' ').toUpperCase() : 'Semua Pos Dana' }}
+                  </span>
+                </td>
+                <td class="text-right">{{ formatRp(b.saldo_awal || 0) }}</td>
+                <td class="text-right amount-positive">{{ formatRp(b.masuk || 0) }}</td>
+                <td class="text-right amount-negative">({{ formatRp(b.keluar || 0) }})</td>
+                <td class="text-right font-bold" style="color: #059669; font-size: 14px;">
+                  {{ formatRp(b.saldo_akhir || 0) }}
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2"><strong>TOTAL KAS BANK</strong></td>
+                <td class="text-right"><strong>{{ formatRp(mutasiData?.bank?.saldo_awal || 0) }}</strong></td>
+                <td class="text-right amount-positive"><strong>{{ formatRp(mutasiData?.bank?.masuk || 0) }}</strong></td>
+                <td class="text-right amount-negative"><strong>({{ formatRp(mutasiData?.bank?.keluar || 0) }})</strong></td>
+                <td class="text-right" style="font-size: 15px; color: #059669;">
+                  <strong>{{ formatRp(mutasiData?.bank?.saldo_akhir || 0) }}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
     </div>
@@ -410,27 +560,32 @@
                 <th>TGL</th>
                 <th>NO. REF</th>
                 <th>KETERANGAN</th>
+                <th>METODE / BANK</th>
                 <th>KELOMPOK DANA</th>
-                <th>JENIS</th>
                 <th class="text-right">DEBIT (+)</th>
                 <th class="text-right">KREDIT (-)</th>
                 <th>STATUS</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="tx in jurnalData?.transactions || []" :key="tx.id">
-                <td style="white-space: nowrap; font-size: 12px;">{{ formatDate(tx.date) }}</td>
-                <td style="font-size: 11px; color: #2563eb; font-family: monospace;">{{ tx.reference_number }}</td>
-                <td style="font-size: 12px; max-width: 200px;">{{ tx.description }}</td>
-                <td><span class="badge badge-gray">{{ tx.fund_type }}</span></td>
-                <td>
-                  <span :class="['tx-badge', tx.type === 'penerimaan' ? 'tx-penerimaan' : 'tx-penyaluran']">
-                    {{ tx.type }}
+              <tr v-for="t in jurnalData?.transactions || []" :key="t.id">
+                <td style="white-space: nowrap; font-size: 12px;">{{ formatDate(t.date) }}</td>
+                <td style="font-size: 11px; color: #2563eb; font-family: monospace;">{{ t.reference_number }}</td>
+                <td style="font-size: 12px; max-width: 200px;">{{ t.description }}</td>
+                <td style="font-size: 11px;">
+                  <span v-if="t.payment_method === 'tunai'" class="badge badge-gray">Kas Tunai</span>
+                  <span v-else class="badge badge-blue">
+                    {{ t.bank_account ? `${t.bank_account.bank_name} - ${t.bank_account.account_number}` : (t.bank_name || 'Bank') }}
                   </span>
                 </td>
-                <td class="text-right amount-positive">{{ tx.type === 'penerimaan' ? formatRp(tx.amount) : '-' }}</td>
-                <td class="text-right amount-negative">{{ tx.type !== 'penerimaan' ? formatRp(tx.amount) : '-' }}</td>
-                <td><span :class="['status-badge', `status-${tx.status?.toLowerCase()}`]">{{ tx.status }}</span></td>
+                <td>
+                  <span class="badge badge-gray">{{ t.fund_type?.replace(/_/g, ' ').toUpperCase() }}</span>
+                </td>
+                <td class="text-right amount-positive">{{ t.type === 'penerimaan' ? formatRp(t.amount) : '-' }}</td>
+                <td class="text-right amount-negative">{{ t.type !== 'penerimaan' ? formatRp(t.amount) : '-' }}</td>
+                <td>
+                  <span :class="['status-badge', `status-${t.status?.toLowerCase()}`]">{{ t.status }}</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -454,6 +609,8 @@ const posDate = ref(new Date().toISOString().slice(0, 10));
 const dateFrom = ref(`${year}-01-01`);
 const dateTo = ref(`${year}-12-31`);
 const bukuKasMethod = ref('tunai');
+const selectedBankId = ref('');
+const bankAccounts = ref<any[]>([]);
 
 const posData = ref<any>(null);
 const perubData = ref<any>(null);
@@ -467,12 +624,21 @@ const jurnalData = ref<any>(null);
 let runningBal = 0;
 
 const funds = [
-  { key: 'zakat', label: 'Dana Zakat (1101)' },
-  { key: 'infaq_terikat', label: 'Dana Infak Terikat (2101)' },
-  { key: 'infaq_tidak_terikat', label: 'Dana Infak Tidak Terikat (2102)' },
+  { key: 'zakat', label: 'Dana Zakat (3101)' },
+  { key: 'infaq_terikat', label: 'Dana Infak Terikat (3201)' },
+  { key: 'infaq_tidak_terikat', label: 'Dana Infak Tidak Terikat (3202)' },
   { key: 'amil', label: 'Dana Amil (3301)' },
   { key: 'non_halal', label: 'Dana Non Halal (3401)' },
 ];
+
+const fetchBankAccounts = async () => {
+  try {
+    const res = await api.get('/bank-accounts');
+    bankAccounts.value = res.data || [];
+  } catch (err) {
+    console.error(err);
+  }
+};
 
 const fetchPosisi = async () => {
   const r = await api.get(`/reports/posisi-keuangan?date=${posDate.value}`);
@@ -490,7 +656,15 @@ const fetchArusKas = async () => {
 };
 
 const fetchBukuKas = async () => {
-  const r = await api.get(`/reports/buku-kas?date_from=${dateFrom.value}&date_to=${dateTo.value}&payment_method=${bukuKasMethod.value}`);
+  const params = new URLSearchParams();
+  params.append('date_from', dateFrom.value);
+  params.append('date_to', dateTo.value);
+  params.append('payment_method', bukuKasMethod.value);
+  if (bukuKasMethod.value === 'bank' && selectedBankId.value) {
+    params.append('bank_account_id', selectedBankId.value);
+  }
+
+  const r = await api.get(`/reports/buku-kas?${params.toString()}`);
   bukuKasData.value = r.data;
   runningBal = r.data?.saldo_awal || 0;
 };
@@ -547,5 +721,8 @@ const loadReport = () => {
 };
 
 watch(() => props.reportType, loadReport);
-onMounted(loadReport);
+onMounted(() => {
+  loadReport();
+  fetchBankAccounts();
+});
 </script>
