@@ -335,6 +335,12 @@ class ReportController extends Controller
         $tunai = $this->getMutasiByMethod('tunai', $dateFrom, $dateTo);
         $bank = $this->getMutasiByMethod('bank', $dateFrom, $dateTo);
 
+        // Realtime Saldo Per Kas Tunai
+        $tunaiLiveBalance = Transaction::whereIn('status', ['Disetujui', 'Tersalurkan'])
+            ->where('payment_method', 'tunai')
+            ->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as s")
+            ->value('s') ?? 0;
+
         // Mutasi per masing-masing rekening bank
         $bankAccounts = BankAccount::all();
         $bankAccountsMutasi = [];
@@ -348,6 +354,8 @@ class ReportController extends Controller
             $masuk = (clone $q)->where('type', 'penerimaan')->whereBetween('date', [$dateFrom, $dateTo])->sum('amount');
             $keluar = (clone $q)->where('type', '!=', 'penerimaan')->whereBetween('date', [$dateFrom, $dateTo])->sum('amount');
 
+            $liveBalance = (clone $q)->selectRaw("SUM(CASE WHEN type='penerimaan' THEN amount ELSE -amount END) as s")->value('s') ?? 0;
+
             $bankAccountsMutasi[] = [
                 'id' => $b->id,
                 'bank_name' => $b->bank_name,
@@ -358,8 +366,87 @@ class ReportController extends Controller
                 'masuk' => (float)$masuk,
                 'keluar' => (float)$keluar,
                 'saldo_akhir' => (float)($sAwal + $masuk - $keluar),
+                'live_balance' => (float)$liveBalance,
             ];
         }
+
+        // Query Rincian Mutasi Transaksi
+        $txQuery = Transaction::with(['bankAccount'])
+            ->whereIn('status', ['Disetujui', 'Tersalurkan']);
+
+        $account = $request->get('account', 'all');
+        if ($account === 'tunai') {
+            $txQuery->where('payment_method', 'tunai');
+        } else if ($account !== 'all' && is_numeric($account)) {
+            $txQuery->where('bank_account_id', $account);
+        }
+
+        if ($request->filled('fund_type') && $request->fund_type !== 'all') {
+            $txQuery->where('fund_type', $request->fund_type);
+        }
+
+        if ($request->filled('year') && $request->year !== 'all') {
+            $txQuery->whereYear('date', $request->year);
+        }
+
+        if ($request->filled('month') && $request->month !== 'all') {
+            $txQuery->whereMonth('date', $request->month);
+        }
+
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $txQuery->where(function ($q) use ($s) {
+                $q->where('reference_number', 'like', "%{$s}%")
+                  ->orWhere('party_name', 'like', "%{$s}%")
+                  ->orWhere('description', 'like', "%{$s}%")
+                  ->orWhere('bank_name', 'like', "%{$s}%");
+            });
+        }
+
+        $transactions = $txQuery->orderBy('date')->orderBy('id')->get();
+
+        // Hitung Saldo Berjalan (Running Balance)
+        $running = 0;
+        $totalDebet = 0;
+        $totalKredit = 0;
+
+        $mutasiRows = [];
+        foreach ($transactions as $t) {
+            $isDebet = $t->type === 'penerimaan';
+            $debet = $isDebet ? (float)$t->amount : 0;
+            $kredit = !$isDebet ? (float)$t->amount : 0;
+
+            $running += ($debet - $kredit);
+            $totalDebet += $debet;
+            $totalKredit += $kredit;
+
+            $accountLabel = 'Kas Tunai UPZ';
+            if ($t->payment_method === 'bank') {
+                if ($t->bankAccount) {
+                    $accountLabel = "{$t->bankAccount->bank_name} ({$t->bankAccount->account_number})";
+                } else {
+                    $accountLabel = $t->bank_name ?: 'Kas Bank';
+                }
+            }
+
+            $mutasiRows[] = [
+                'id' => $t->id,
+                'date' => $t->date->format('Y-m-d'),
+                'reference_number' => $t->reference_number,
+                'account_label' => $accountLabel,
+                'party_name' => $t->party_name,
+                'description' => $t->description,
+                'fund_type' => $t->fund_type,
+                'category' => $t->category,
+                'debet' => $debet,
+                'kredit' => $kredit,
+                'running_balance' => $running,
+                'proof_file_path' => $t->proof_file_path,
+                'proof_file_name' => $t->proof_file_name,
+            ];
+        }
+
+        $allLiveCashBank = (float)$tunaiLiveBalance + array_sum(array_column($bankAccountsMutasi, 'live_balance'));
 
         $data = [
             'report_type' => 'Mutasi Kas & Bank',
@@ -367,7 +454,12 @@ class ReportController extends Controller
             'date_to' => $dateTo,
             'tunai' => $tunai,
             'bank' => $bank,
+            'tunai_live_balance' => (float)$tunaiLiveBalance,
             'bank_accounts' => $bankAccountsMutasi,
+            'total_debet' => $totalDebet,
+            'total_kredit' => $totalKredit,
+            'saldo_kumulatif' => $allLiveCashBank,
+            'transactions' => $mutasiRows,
         ];
 
         if ($request->format === 'pdf') {

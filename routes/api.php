@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('collection-plans', CollectionPlanController::class);
 
     // TRANSAKSI
+    Route::post('/transactions/transfer-kas', [TransactionController::class, 'transferKas']);
     Route::apiResource('transactions', TransactionController::class);
     Route::patch('/transactions/{transaction}/status', [TransactionController::class, 'updateStatus']);
 

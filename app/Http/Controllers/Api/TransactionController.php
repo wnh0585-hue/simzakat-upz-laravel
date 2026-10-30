@@ -220,4 +220,179 @@ class TransactionController extends Controller
 
         return response()->json($transaction->fresh()->load(['creator', 'verifier', 'approver']));
     }
+
+    public function transferKas(Request $request)
+    {
+        $validated = $request->validate([
+            'mutasi_type' => 'required|in:penarikan,setoran,transfer_bank',
+            'date' => 'required|date',
+            'amount' => 'required|numeric|min:1',
+            'fund_type' => 'required|in:zakat,infaq_terikat,infaq_tidak_terikat,amil,non_halal',
+            'source_bank_id' => 'nullable|exists:bank_accounts,id',
+            'target_bank_id' => 'nullable|exists:bank_accounts,id',
+            'description' => 'required|string',
+            'proof_file' => 'nullable|file|max:10240',
+        ]);
+
+        $proofPath = null;
+        $proofName = null;
+        if ($request->hasFile('proof_file')) {
+            $file = $request->file('proof_file');
+            $proofPath = $file->store('proofs', 'public');
+            $proofName = $file->getClientOriginalName();
+        }
+
+        $amount = (float)$validated['amount'];
+        $todayStr = date('Ymd');
+        $randomOut = rand(1000, 9999);
+        $randomIn = rand(1000, 9999);
+
+        return DB::transaction(function () use ($validated, $amount, $proofPath, $proofName, $todayStr, $randomOut, $randomIn, $request) {
+            $user = $request->user();
+            $userId = $user?->id;
+
+            if ($validated['mutasi_type'] === 'penarikan') {
+                $sourceBank = \App\Models\BankAccount::findOrFail($validated['source_bank_id']);
+                $sourceBankName = "Bank {$sourceBank->bank_name} - {$sourceBank->account_number}";
+
+                // 1. Pengeluaran dari Bank (Kredit di Bank)
+                $txOut = Transaction::create([
+                    'reference_number' => "MUT-OUT-{$todayStr}-{$randomOut}",
+                    'date' => $validated['date'],
+                    'type' => $validated['fund_type'] === 'amil' ? 'amil_operasional' : 'penyaluran',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'bank',
+                    'bank_account_id' => $sourceBank->id,
+                    'bank_name' => $sourceBankName,
+                    'party_name' => 'Kas Tunai UPZ (Pemindahan Buku)',
+                    'description' => "[MUTASI KAS] {$validated['description']} ({$sourceBankName} ➔ Kas Tunai)",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                // 2. Penerimaan ke Kas Tunai (Debet di Kas Tunai)
+                $txIn = Transaction::create([
+                    'reference_number' => "MUT-IN-{$todayStr}-{$randomIn}",
+                    'date' => $validated['date'],
+                    'type' => 'penerimaan',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'tunai',
+                    'party_name' => "Penarikan dari {$sourceBankName}",
+                    'description' => "[MUTASI KAS] {$validated['description']} (Kas Tunai ⬅️ {$sourceBankName})",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                return response()->json(['message' => 'Mutasi penarikan tunai berhasil diproses', 'out' => $txOut, 'in' => $txIn]);
+
+            } else if ($validated['mutasi_type'] === 'setoran') {
+                $targetBank = \App\Models\BankAccount::findOrFail($validated['target_bank_id']);
+                $targetBankName = "Bank {$targetBank->bank_name} - {$targetBank->account_number}";
+
+                // 1. Pengeluaran dari Kas Tunai (Kredit di Kas Tunai)
+                $txOut = Transaction::create([
+                    'reference_number' => "MUT-OUT-{$todayStr}-{$randomOut}",
+                    'date' => $validated['date'],
+                    'type' => $validated['fund_type'] === 'amil' ? 'amil_operasional' : 'penyaluran',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'tunai',
+                    'party_name' => "Setoran ke {$targetBankName}",
+                    'description' => "[MUTASI KAS] {$validated['description']} (Kas Tunai ➔ {$targetBankName})",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                // 2. Penerimaan ke Bank (Debet di Bank)
+                $txIn = Transaction::create([
+                    'reference_number' => "MUT-IN-{$todayStr}-{$randomIn}",
+                    'date' => $validated['date'],
+                    'type' => 'penerimaan',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'bank',
+                    'bank_account_id' => $targetBank->id,
+                    'bank_name' => $targetBankName,
+                    'party_name' => 'Setoran dari Kas Tunai UPZ',
+                    'description' => "[MUTASI KAS] {$validated['description']} ({$targetBankName} ⬅️ Kas Tunai)",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                return response()->json(['message' => 'Mutasi setoran tunai berhasil diproses', 'out' => $txOut, 'in' => $txIn]);
+
+            } else { // transfer_bank
+                $sourceBank = \App\Models\BankAccount::findOrFail($validated['source_bank_id']);
+                $targetBank = \App\Models\BankAccount::findOrFail($validated['target_bank_id']);
+                $sourceBankName = "Bank {$sourceBank->bank_name} - {$sourceBank->account_number}";
+                $targetBankName = "Bank {$targetBank->bank_name} - {$targetBank->account_number}";
+
+                // 1. Pengeluaran dari Bank Sumber (Kredit)
+                $txOut = Transaction::create([
+                    'reference_number' => "MUT-OUT-{$todayStr}-{$randomOut}",
+                    'date' => $validated['date'],
+                    'type' => $validated['fund_type'] === 'amil' ? 'amil_operasional' : 'penyaluran',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'bank',
+                    'bank_account_id' => $sourceBank->id,
+                    'bank_name' => $sourceBankName,
+                    'party_name' => "Transfer ke {$targetBankName}",
+                    'description' => "[MUTASI KAS] {$validated['description']} ({$sourceBankName} ➔ {$targetBankName})",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                // 2. Penerimaan ke Bank Tujuan (Debet)
+                $txIn = Transaction::create([
+                    'reference_number' => "MUT-IN-{$todayStr}-{$randomIn}",
+                    'date' => $validated['date'],
+                    'type' => 'penerimaan',
+                    'category' => 'Pemindahan Buku / Mutasi Kas',
+                    'fund_type' => $validated['fund_type'],
+                    'amount' => $amount,
+                    'payment_method' => 'bank',
+                    'bank_account_id' => $targetBank->id,
+                    'bank_name' => $targetBankName,
+                    'party_name' => "Transfer dari {$sourceBankName}",
+                    'description' => "[MUTASI KAS] {$validated['description']} ({$targetBankName} ⬅️ {$sourceBankName})",
+                    'proof_file_path' => $proofPath,
+                    'proof_file_name' => $proofName,
+                    'status' => 'Disetujui',
+                    'created_by' => $userId,
+                    'verified_by' => $userId,
+                    'approved_by' => $userId,
+                ]);
+
+                return response()->json(['message' => 'Mutasi transfer antar bank berhasil diproses', 'out' => $txOut, 'in' => $txIn]);
+            }
+        });
+    }
 }
