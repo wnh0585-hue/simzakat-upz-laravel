@@ -10,6 +10,7 @@
       <!-- 2. Master Data -->
       <Muzakki v-else-if="activeTab === 'muzakki'" />
       <Mustahik v-else-if="activeTab === 'mustahik'" />
+      <BankAccounts v-else-if="activeTab === 'bank-accounts'" />
 
       <!-- 3. Perencanaan -->
       <CollectionPlans v-else-if="activeTab === 'collection-plans'" />
@@ -56,6 +57,7 @@ import Login from './views/Login.vue';
 import Dashboard from './views/Dashboard.vue';
 import Muzakki from './views/Muzakki.vue';
 import Mustahik from './views/Mustahik.vue';
+import BankAccounts from './views/BankAccounts.vue';
 import Transactions from './views/Transactions.vue';
 import Programs from './views/Programs.vue';
 import ProgramControl from './views/ProgramControl.vue';

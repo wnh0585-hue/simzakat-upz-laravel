@@ -134,6 +134,7 @@ const navGroups = [
     items: [
       { key: 'muzakki', label: 'Data Muzakki', icon: Users },
       { key: 'mustahik', label: 'Data Mustahik', icon: HeartHandshake },
+      { key: 'bank-accounts', label: 'Master Rekening Bank', icon: Landmark },
     ],
   },
   {
@@ -194,6 +195,7 @@ const titleMap: Record<string, string> = {
   dashboard: 'Ikhtisar Dashboard Utama',
   muzakki: 'Data Muzakki / Donatur',
   mustahik: 'Data Mustahik (Penerima 8 Asnaf)',
+  'bank-accounts': 'Master Rekening Bank UPZ',
   penerimaan: 'Penerimaan Dana ZIS',
   penyaluran: 'Penyaluran Dana ZIS',
   operasional: 'Pengeluaran Operasional Amil',

@@ -180,6 +180,42 @@ class BackupRestoreController extends Controller
             }
 
             // 5. Restore Bank Accounts
+            if (empty($bankAccountsList) && !empty($transactionsList)) {
+                // Auto-detect bank accounts from transactions list
+                $detected = [];
+                foreach ($transactionsList as $t) {
+                    $bn = $t['bank_name'] ?? $t['bankName'] ?? '';
+                    if ($bn && !isset($detected[$bn])) {
+                        $detected[$bn] = true;
+                        // Try to extract account number and holder
+                        preg_match('/(\d{7,15})/', $bn, $matches);
+                        $accNo = $matches[1] ?? (string)rand(1000000000, 9999999999);
+                        $bankName = 'Bank Jateng';
+                        if (stripos($bn, 'BSI') !== false) $bankName = 'BSI';
+                        else if (stripos($bn, 'BRI') !== false) $bankName = 'BRI';
+
+                        $fundType = 'zakat';
+                        if (stripos($bn, 'infak') !== false || stripos($bn, 'infaq') !== false) $fundType = 'infaq_tidak_terikat';
+                        else if (stripos($bn, 'amil') !== false) $fundType = 'amil';
+
+                        $holder = 'UPZ Kemenag Kebumen';
+                        if (preg_match('/\((.*?)\)/', $bn, $hMatches)) {
+                            $holder = str_replace('a.n.', '', $hMatches[1]);
+                            $holder = trim($holder);
+                        }
+
+                        $bankAccountsList[] = [
+                            'bank_name' => $bankName,
+                            'account_number' => $accNo,
+                            'account_holder' => $holder,
+                            'fund_type' => $fundType,
+                            'type' => 'upz',
+                            'description' => $bn,
+                        ];
+                    }
+                }
+            }
+
             foreach ($bankAccountsList as $item) {
                 BankAccount::updateOrCreate(
                     ['account_number' => $item['account_number'] ?? $item['accountNumber'] ?? '0000'],
@@ -194,9 +230,27 @@ class BackupRestoreController extends Controller
                 $counts['bank_accounts']++;
             }
 
+            // Cache all bank accounts for fast ID linking
+            $allBanks = BankAccount::all();
+
             // 6. Restore Transactions
             foreach ($transactionsList as $item) {
                 $ref = $item['reference_number'] ?? $item['referenceNumber'] ?? $item['refNumber'] ?? ('ZIS-' . date('Ymd') . '-' . rand(1000, 9999));
+                $bName = $item['bank_name'] ?? $item['bankName'] ?? null;
+                $bankAccId = null;
+
+                if ($bName) {
+                    foreach ($allBanks as $ba) {
+                        if (str_contains($bName, $ba->account_number)) {
+                            $bankAccId = $ba->id;
+                            break;
+                        }
+                    }
+                    if (!$bankAccId && stripos($bName, 'BSI') !== false) {
+                        $bsiAcc = $allBanks->first(fn($b) => stripos($b->bank_name, 'BSI') !== false);
+                        if ($bsiAcc) $bankAccId = $bsiAcc->id;
+                    }
+                }
                 
                 Transaction::updateOrCreate(
                     ['reference_number' => $ref],
@@ -207,8 +261,8 @@ class BackupRestoreController extends Controller
                         'fund_type' => $item['fund_type'] ?? $item['fundType'] ?? 'zakat',
                         'amount' => (float)($item['amount'] ?? 0),
                         'payment_method' => $item['payment_method'] ?? $item['paymentMethod'] ?? 'bank',
-                        'bank_name' => $item['bank_name'] ?? $item['bankName'] ?? 'BSI',
-                        'bank_account' => $item['bank_account'] ?? $item['bankAccount'] ?? null,
+                        'bank_name' => $bName ?? 'BSI',
+                        'bank_account_id' => $bankAccId,
                         'party_name' => $item['party_name'] ?? $item['partyName'] ?? 'Hamba Allah',
                         'asnaf' => isset($item['asnaf']) ? strtolower($item['asnaf']) : null,
                         'description' => $item['description'] ?? '-',
